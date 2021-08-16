@@ -168,7 +168,7 @@ void LargeKinfuImpl<MatType>::reset()
     pose         = Affine3f::Identity();
     submapMgr->reset();
 
-    if(useLCD)
+    if(useLCD && lcd)
     {
         lcd->reset();
     }
@@ -307,28 +307,30 @@ bool LargeKinfuImpl<MatType>::updateT(const MatType& _depth, const Mat& _img)
     //4. Update map
     bool isMapUpdated = submapMgr->updateMap(frameCounter, newPoints, newNormals);
 
-    if(isMapUpdated)
+    //5. Loop Closure Detection
+    // Before Optimize the PoseGraph, run loop closure first.
+    if(!grayImg.empty() && useLCD)
     {
-        // Before Optimize the PoseGraph, run loop closure first.
-        if(!grayImg.empty() && useLCD)
+        int currentSubmapId = submapMgr->getCurrentSubmapID();
+
+        if(currentSubmapId != -1)
         {
-            int currentSubmapId = submapMgr->getCurrentSubmapID();
+            int tarSubmapID = -1;
+            bool ifLoop = false;
 
-            if(currentSubmapId != -1)
+            lcd->addFrame(grayImg, frameCounter, currentSubmapId, tarSubmapID, ifLoop);
+
+            if(ifLoop && tarSubmapID != -1 && currentSubmapId != tarSubmapID)
             {
-                int tarSubmapID = -1;
-                bool ifLoop = false;
-
-                lcd->addFrame(grayImg, frameCounter, currentSubmapId, tarSubmapID, ifLoop);
-
-                if(ifLoop && tarSubmapID != -1 && currentSubmapId != tarSubmapID)
-                {
-                    // Adding Loop Edge for optimize. If the Edge is duplicate, then skip.
-                    submapMgr->addEdgeToCurrentSubmap(currentSubmapId, tarSubmapID);
-                }
+                // Adding Loop Edge for optimize. If the Edge is duplicate, then skip.
+                if(submapMgr->addEdgeToCurrentSubmap(currentSubmapId, tarSubmapID))
+                    CV_LOG_INFO(NULL, "There is Loop Closure!!!! New edge was added from Submap :"<<currentSubmapId<<" to Submap:"<<tarSubmapID);
             }
         }
+    }
 
+    if(isMapUpdated)
+    {
         // TODO: Convert constraints to posegraph
         Ptr<kinfu::detail::PoseGraph> poseGraph = submapMgr->MapToPoseGraph();
         CV_LOG_INFO(NULL, "Created posegraph");

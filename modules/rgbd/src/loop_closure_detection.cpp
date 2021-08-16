@@ -4,8 +4,7 @@
 
 #include "precomp.hpp"
 #include "loop_closure_detection.hpp"
-//#include "keyframe.cpp"
-
+#include "keyframe.cpp"
 namespace cv{
 namespace large_kinfu{
 
@@ -22,6 +21,8 @@ LoopClosureDetectionImpl::LoopClosureDetectionImpl(const String& _modelBin, cons
 
     net->setPreferableBackend(_backendId);
     net->setPreferableTarget(_targetId);
+
+    KFDataBase = makePtr<KeyFrameDatabase>(maxDatabaseSize);
 }
 
 bool LoopClosureDetectionImpl::loopCheck(int& tarSubmapID)
@@ -32,46 +33,105 @@ bool LoopClosureDetectionImpl::loopCheck(int& tarSubmapID)
     if(KFDataBase->getSize() < minDatabaseSize )
         return false;
 
-    float maxScore = 0;
-    int count = 0;
-    int bestId = 0;
-    int DBsize = KFDataBase->getSize();
+    double maxScore = 0;
+    int bestId = -1;
 
-    // Traverse the database
-    for(int i = 0; i < DBsize; i++)
+    std::vector<int> candidateKFs;
+
+    // Find candidate key frames which similarity are greater than the similarityLow.
+    candidateKFs = KFDataBase->getCandidateKF(currentFeature, similarityLow, maxScore, bestId);
+
+    if( candidateKFs.empty() || maxScore < similarityHigh)
+        return false;
+
+    // Remove consecutive keyframes and keyframes from the currentSubmapID.
+    std::vector<int> duplicateKFs;
+    std::vector<int>::iterator iter = candidateKFs.begin();
+    std::vector<int>::iterator iterTemp;
+    while (iter != candidateKFs.end() )
     {
-        Ptr<KeyFrame> DBkeyFrame = KFDataBase->getKeyFrameByIndex(i);
-        float similarity = score(currentFeature, DBkeyFrame->DNNFeature);
-        if(similarity > maxScore)
+        Ptr<KeyFrame> keyFrameDB = KFDataBase->getKeyFrameByID(*iter);
+
+        if(keyFrameDB && keyFrameDB->nextKeyFrameID != -1)
         {
-            maxScore = similarity;
-            bestId = i;
+            iterTemp = find(candidateKFs.begin(), candidateKFs.end(), keyFrameDB->nextKeyFrameID);
+            if( iterTemp != candidateKFs.end() || keyFrameDB->submapID == currentSubmapID )
+            {
+                duplicateKFs.push_back(*iterTemp);
+            }
         }
-        if(similarity > similarityLow)
+        iter++;
+    }
+
+    // Delete duplicated KFs.
+    for(int deleteID : duplicateKFs)
+    {
+        iterTemp = find(candidateKFs.begin(), candidateKFs.end(), deleteID);
+        if(iterTemp != candidateKFs.end())
         {
-            count++;
+            candidateKFs.erase(iterTemp);
         }
     }
 
-    if(maxScore < similarityHigh || count > 3)
+    // Remove the keyframe belonging to the currentSubmap.
+    iter = candidateKFs.begin();
+    while (iter != candidateKFs.end() )
+    {
+        Ptr<KeyFrame> keyFrameDB = KFDataBase->getKeyFrameByID(*iter);
+        if(keyFrameDB->submapID == currentFrameID)
+        {
+            candidateKFs.erase(iter);
+        }
+        iter++;
+    }
+
+    // If all candidate KF from the same submap, then return true.
+    int tempSubmapID = -1;
+    iter = candidateKFs.begin();
+
+    // If the candidate frame does not belong to the same submapID,
+    // it means that it is impossible to specify the target SubmapID.
+    while (iter != candidateKFs.end() ) {
+        Ptr<KeyFrame> keyFrameDB = KFDataBase->getKeyFrameByID(*iter);
+        if(tempSubmapID == -1)
+        {
+            tempSubmapID = keyFrameDB->submapID;
+        }else
+        {
+            if(tempSubmapID != keyFrameDB->submapID)
+                return false;
+        }
+        iter++;
+    }
+
+    // Check whether currentFrame is closed to previous looped Keyframe.
+    if(currentFrameID - preLoopedKFID < 20)
         return false;
 
-    bestLoopFrame = KFDataBase->getKeyFrameByIndex(bestId);
+    if(!candidateKFs.empty())
+        bestLoopFrame = KFDataBase->getKeyFrameByID(candidateKFs[0]);
+    else
+        return false;
 
     // find target submap ID
-    if(bestLoopFrame->submapID == -1)
+    if(bestLoopFrame->submapID == -1 || bestLoopFrame->submapID == currentSubmapID)
         return false;
     else
     {
         tarSubmapID = bestLoopFrame->submapID;
+        preLoopedKFID = currentFrameID;
+        currentFrameID = -1;
+        
         return true;
     }
 }
 
 void LoopClosureDetectionImpl::addFrame(InputArray _img, const int frameID, const int submapID, int& tarSubmapID, bool& ifLoop)
 {
+
     CV_Assert(!_img.empty());
     currentFrameID = frameID;
+    currentSubmapID = submapID;
 
     Mat img;
     if (_img.isUMat())
@@ -84,7 +144,7 @@ void LoopClosureDetectionImpl::addFrame(InputArray _img, const int frameID, cons
     }
 
     // feature Extract.
-    processFrame(_img, currentFeature);
+    processFrame(img, currentFeature);
 
     // Key frame filtering.
     ifLoop = loopCheck(tarSubmapID);
@@ -98,28 +158,23 @@ void LoopClosureDetectionImpl::addFrame(InputArray _img, const int frameID, cons
     }
 }
 
-float LoopClosureDetectionImpl::score(InputArray feature1, InputArray feature2)
-{
-    Mat mat1, mat2;
-    mat1 = feature1.getMat();
-    mat2 = feature2.getMat();
-    Mat out = mat2 * mat1.t();
-    return out.at<float>(0,0);
-}
-
 void LoopClosureDetectionImpl::reset()
 {
     KFDataBase->reset();
 }
 
-bool LoopClosureDetectionImpl::processFrame(InputArray img, OutputArrayOfArrays output)
+void LoopClosureDetectionImpl::processFrame(InputArray img, Mat& output)
 {
-    Mat outputFeature = output.getMat();
-    Mat blob = dnn::blobFromImage(img, 1.0/255.0, inputSize);
+    Mat imgBlur, outMat;
+    cv::GaussianBlur(img, imgBlur, cv::Size(7, 7), 0);
+    Mat blob = dnn::blobFromImage(imgBlur, 1.0/255.0, inputSize);
     net->setInput(blob);
-    net->forward(outputFeature);
-    outputFeature /= norm(outputFeature);
-    return true;
+    net->forward(outMat);
+
+    outMat /= norm(outMat);
+    output = outMat.clone();
+    
+    //! Add ORB feature.
 }
 
 Ptr<LoopClosureDetection> LoopClosureDetection::create(const String& modelBin, const String& modelTxt, const Size& input_size, int backendId, int targetId)

@@ -12,15 +12,20 @@ namespace cv
 namespace large_kinfu
 {
 
+// It works like doubly linked list.
 struct KeyFrame
 {
 
     Mat DNNFeature;
     int submapID;
 
-    KeyFrame();
+    int preKeyFrameID;
+    int nextKeyFrameID;
 
+    KeyFrame();
     KeyFrame(Mat _DNNfeature, int _submapID);
+    KeyFrame(Mat _DNNfeature, int _submapID, int preKeyFrameID);
+
 };
 
 class KeyFrameDatabase
@@ -29,15 +34,15 @@ public:
 
     KeyFrameDatabase();
 
+    KeyFrameDatabase(int maxSizeDB);
+
     ~KeyFrameDatabase() = default;
 
     void addKeyFrame( const Mat& DNNFeature, int frameID, int submapID);
 
     Ptr<KeyFrame> getKeyFrameByID(int keyFrameID);
 
-    bool deleteKeyFrame(int keyFrameID);
-
-    Ptr<KeyFrame> getKeyFrameByIndex(int index);
+    bool deleteKeyFrameByID(int keyFrameID);
 
     int getSize();
 
@@ -45,9 +50,26 @@ public:
 
     void reset();
 
+    void shrinkDB();
+
+    int getLastKeyFrameID();
+
+    std::vector<int> getCandidateKF(const Mat& currentFeature, const double& similarityLow, double& bestSimilarity, int& bestId);
+
+    double score(InputArray feature1, InputArray feature2);
+    
+    // Debug only
+    void printDB();
+
 private:
     // < keyFrameID, KeyFrame>
-    std::map<int, Ptr<KeyFrame>> DataBase;
+    std::map<int, Ptr<KeyFrame> > DataBase;
+
+    int maxSizeDB;
+
+    int lastKeyFrameID;
+
+
 };
 
 }// namespace large_kinfu

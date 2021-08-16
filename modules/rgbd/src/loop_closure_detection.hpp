@@ -22,11 +22,9 @@ public:
 
     void reset() CV_OVERRIDE;
 
-    bool processFrame(InputArray img, OutputArray DNNfeature);
+    void processFrame(InputArray img, Mat& DNNfeature);
 
     bool newFrameCheck();
-
-    float score(InputArray feature1, InputArray feature2);
 
 private:
     Ptr<KeyFrameDatabase> KFDataBase;
@@ -36,10 +34,16 @@ private:
     Mat currentFeature;
     Ptr<KeyFrame> bestLoopFrame;
 
+    int currentSubmapID = -1;
+
     // Param: Only for DeepLCD
-    int minDatabaseSize = 50;
-    float similarityHigh = 0.94;
-    float similarityLow = 0.92;
+    int minDatabaseSize = 5;
+    int maxDatabaseSize = 2000;
+
+    int preLoopedKFID = -1;
+
+    double similarityHigh = 0.94;
+    double similarityLow = 0.92;
 
 };
 
