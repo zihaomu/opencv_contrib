@@ -149,9 +149,10 @@ class CV_EXPORTS_W LargeKinfu
   This class implements a Loop Closing Detection of 3d reconstruction algorithm for
   larger environments using Spatially hashed TSDF volume "Submaps".
 
-  It takes a sequence RGB images and processes each image by DeepLCD model.
-  According to the similarity of features extracted by DeepLCD, determine whether there is a LOOP.
-  DeepLCD was provided by: https://github.com/rpng/calc.
+  It takes a sequence RGB images and processes each image by HF-Net.
+  According to the similarity of features extracted by HF-Net, determine whether there is a LOOP.
+  Original HF-Net was provided by: https://github.com/ethz-asl/hfnet.
+  Pre-trained model can be found at: https://1drv.ms/u/s!ApQBoiZSe8Evgolqw23hI8D7lP9mKw?e=JKwPHe.
 
 */
 class CV_EXPORTS_W LoopClosureDetection {
@@ -162,8 +163,8 @@ public:
     virtual ~LoopClosureDetection() = default;
 
     // Adding Frame.
-    // If there is loop, function will set ifLoop to TRUE and assign target SubmapID to tarSubmapID.
-    CV_WRAP virtual void addFrame(InputArray img, const int frameID, const int submapID, int& tarSubmapID, bool& ifLoop) = 0;
+    // If there is loop, function will return TURE, and the tarSubmapID will be set as the target submap ID, otherwise return False.
+    CV_WRAP virtual bool addFrame(InputArray img, const int frameID, const int submapID, CV_OUT int& tarSubmapID) = 0;
 
     // Stop run loop closing detection.
     CV_WRAP virtual void reset() = 0;

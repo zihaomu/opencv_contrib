@@ -8,6 +8,10 @@
 #include "opencv2/dnn.hpp"
 #include "keyframe.hpp"
 
+#ifdef HAVE_OPENCV_FEATURES2D
+#include <opencv2/features2d.hpp>
+#endif
+
 namespace cv{
 namespace large_kinfu{
 
@@ -16,34 +20,49 @@ class LoopClosureDetectionImpl : public LoopClosureDetection
 public:
     LoopClosureDetectionImpl(const String& modelBin, const String& modelTxt, const Size& input_size, int backendId = 0, int targetId = 0);
 
-    void addFrame(InputArray img, const int frameID, const int submapID, int& tarSubmapID, bool& ifLoop) CV_OVERRIDE;
+    bool addFrame(InputArray img, const int frameID, const int submapID, int& tarSubmapID) CV_OVERRIDE;
 
     bool loopCheck(int& tarSubmapID);
 
     void reset() CV_OVERRIDE;
 
-    void processFrame(InputArray img, Mat& DNNfeature);
+    void processFrame(InputArray img, Mat& DNNfeature,std::vector<KeyPoint>& currentKeypoints, Mat& ORBFeature);
+    
+    bool ORBMather(InputArray feature1, InputArray feature2);
 
     bool newFrameCheck();
+    
+    void ORBExtract();
 
 private:
     Ptr<KeyFrameDatabase> KFDataBase;
     Ptr<dnn::Net> net;
     Size inputSize;
     int currentFrameID;
-    Mat currentFeature;
+    std::vector<KeyPoint> currentKeypoints;
+    Mat currentDNNFeature;
+    Mat currentORBFeature;
     Ptr<KeyFrame> bestLoopFrame;
 
     int currentSubmapID = -1;
-
-    // Param: Only for DeepLCD
-    int minDatabaseSize = 5;
+    
+#ifdef HAVE_OPENCV_FEATURES2D
+    Ptr<FeatureDetector> ORBdetector = ORB::create();
+    Ptr<DescriptorExtractor> ORBdescriptor = ORB::create();
+    Ptr<DescriptorMatcher> ORBmatcher = DescriptorMatcher::create("BruteForce-Hamming");
+#endif
+    size_t ORBminMathing = 10;
+    
+    int minDatabaseSize = 50;
     int maxDatabaseSize = 2000;
 
     int preLoopedKFID = -1;
-
-    double similarityHigh = 0.94;
-    double similarityLow = 0.92;
+    
+    // Param: HF-Net
+    // Github Link: https://github.com/ethz-asl/hfnet
+    std::vector<String> outNameDNN;
+    double similarityHigh = 0.84;
+    double similarityLow = 0.82;
 
 };
 

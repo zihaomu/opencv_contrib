@@ -20,21 +20,37 @@ KeyFrame::KeyFrame(Mat _DNNfeature, int _submapID) : DNNFeature(_DNNfeature), su
     nextKeyFrameID = -1;
 };
 
-KeyFrame::KeyFrame(Mat _DNNfeature, int _submapID, int _preKeyFrameID) : DNNFeature(_DNNfeature), submapID(_submapID), preKeyFrameID(_preKeyFrameID)
+KeyFrame::KeyFrame(Mat _DNNfeature, int _submapID, int _preKeyFrameID):DNNFeature(_DNNfeature), submapID(_submapID), preKeyFrameID(_preKeyFrameID)
+{}
+
+KeyFrame::KeyFrame(Mat _DNNfeature, int _submapID, int _preKeyFrameID, std::vector<KeyPoint> _keypoints, Mat _ORBFeatures):DNNFeature(_DNNfeature), submapID(_submapID), preKeyFrameID(_preKeyFrameID)
 {
-    nextKeyFrameID = -1;
-};
+    keypoints = _keypoints;
+    ORBFeatures = _ORBFeatures;
+}
 
 // Using INT_MAX by default.
 KeyFrameDatabase::KeyFrameDatabase():maxSizeDB(INT_MAX), lastKeyFrameID(-1)
 {
-};
+}
 
 KeyFrameDatabase::KeyFrameDatabase(int _maxSizeDB):maxSizeDB(_maxSizeDB),lastKeyFrameID(-1)
 {
-};
+}
 
-void KeyFrameDatabase::addKeyFrame(const Mat& DNNFeature, int frameID, int submapID)
+void KeyFrameDatabase::addKeyFrame( const Mat& _DNNFeature, int _frameID, int _submapID)
+{
+    std::vector<KeyPoint> _keypoints;
+    Mat _ORBFeatures;
+    addKeyFrameT(_DNNFeature, _frameID, _submapID, _keypoints, _ORBFeatures);
+}
+
+void KeyFrameDatabase::addKeyFrame( const Mat& _DNNFeature, int _frameID, int _submapID, std::vector<KeyPoint>& _keypoints, const Mat& _ORBFeatures)
+{
+    addKeyFrameT(_DNNFeature, _frameID, _submapID, _keypoints, _ORBFeatures);
+}
+
+void KeyFrameDatabase::addKeyFrameT(const Mat& DNNFeature, int frameID, int submapID, std::vector<KeyPoint>& keypoints, const Mat& ORBFeatures)
 {
     Ptr<KeyFrame> kf, preKF;
     preKF = getKeyFrameByID(lastKeyFrameID);
@@ -42,12 +58,12 @@ void KeyFrameDatabase::addKeyFrame(const Mat& DNNFeature, int frameID, int subma
     // new start for KeyFrame in different submaps.
     if(preKF)
     {
-        kf = makePtr<KeyFrame>(DNNFeature, submapID, lastKeyFrameID);
+        kf = makePtr<KeyFrame>(DNNFeature, submapID, lastKeyFrameID, keypoints, ORBFeatures);
         preKF->nextKeyFrameID = frameID;
     }
     else
     {
-        kf = makePtr<KeyFrame>(DNNFeature, submapID, -1);
+        kf = makePtr<KeyFrame>(DNNFeature, submapID, -1, keypoints, ORBFeatures);
     }
 
     // Adding new KF to DB
@@ -123,13 +139,15 @@ int KeyFrameDatabase::getLastKeyFrameID()
 double KeyFrameDatabase::score(InputArray feature1, InputArray feature2)
 {
     Mat mat1, mat2;
+    
     mat1 = feature1.getMat();
     mat2 = feature2.getMat();
+    CV_Assert(mat1.size() == mat2.size());
     double out = mat2.dot(mat1);
     return out;
 }
 
-std::vector<int> KeyFrameDatabase::getCandidateKF(const Mat& currentFeature, const double& similarityLow, double& bestSimilarity, int& bestId)
+std::vector<int> KeyFrameDatabase::getCandidateKF(const Mat& currentFeature, const int currentSubmapID, const double& similarityLow, double& bestSimilarity, int& bestId )
 {
     std::vector<int> cadidateKFs;
     float similarity;
@@ -138,6 +156,8 @@ std::vector<int> KeyFrameDatabase::getCandidateKF(const Mat& currentFeature, con
 
     for(std::map<int, Ptr<KeyFrame> >::const_iterator iter = DataBase.begin(); iter != DataBase.end(); iter++)
     {
+        if( currentSubmapID != -1&& currentSubmapID == iter->second->submapID)
+            continue;
         similarity = score(currentFeature, iter->second->DNNFeature);
 
         if(similarity > similarityLow)
@@ -151,7 +171,7 @@ std::vector<int> KeyFrameDatabase::getCandidateKF(const Mat& currentFeature, con
             bestId = iter->first;
         }
     }
-
+    
     return cadidateKFs;
 }
 
@@ -177,6 +197,7 @@ void KeyFrameDatabase::printDB()
     for(std::map<int, Ptr<KeyFrame> >::const_iterator iter = DataBase.begin(); iter != DataBase.end(); iter++)
     {
         std::cout<<"frame Id= "<<iter->first<<", feature = "<<iter->second->DNNFeature<<std::endl;
+        std::cout<<"ORB Feature"<<iter->second->ORBFeatures<<std::endl;
     }
 }
 

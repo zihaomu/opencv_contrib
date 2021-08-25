@@ -316,15 +316,17 @@ bool LargeKinfuImpl<MatType>::updateT(const MatType& _depth, const Mat& _img)
         if(currentSubmapId != -1)
         {
             int tarSubmapID = -1;
-            bool ifLoop = false;
-
-            lcd->addFrame(grayImg, frameCounter, currentSubmapId, tarSubmapID, ifLoop);
+            
+            bool ifLoop = lcd->addFrame(grayImg, frameCounter, currentSubmapId, tarSubmapID);
 
             if(ifLoop && tarSubmapID != -1 && currentSubmapId != tarSubmapID)
             {
                 // Adding Loop Edge for optimize. If the Edge is duplicate, then skip.
                 if(submapMgr->addEdgeToCurrentSubmap(currentSubmapId, tarSubmapID))
-                    CV_LOG_INFO(NULL, "There is Loop Closure!!!! New edge was added from Submap :"<<currentSubmapId<<" to Submap:"<<tarSubmapID);
+                    CV_LOG_INFO(NULL, "LCD: Find a NEW LOOP! from Submap :"<<currentSubmapId<<" to Submap:"<<tarSubmapID);
+            }else
+            {
+                CV_LOG_INFO(NULL, "LCD: No Loop.");
             }
         }
     }

@@ -16,16 +16,21 @@ namespace large_kinfu
 struct KeyFrame
 {
 
+    // DNN Feature.
     Mat DNNFeature;
     int submapID;
 
     int preKeyFrameID;
     int nextKeyFrameID;
 
-    KeyFrame();
-    KeyFrame(Mat _DNNfeature, int _submapID);
-    KeyFrame(Mat _DNNfeature, int _submapID, int preKeyFrameID);
+    // ORB Feature
+    std::vector<KeyPoint> keypoints;
+    Mat ORBFeatures;
 
+    KeyFrame();
+    KeyFrame(Mat DNNfeature, int submapID);
+    KeyFrame(Mat DNNfeature, int submapID, int preKeyFrameID);
+    KeyFrame(Mat DNNfeature, int submapID, int preKeyFrameID, std::vector<KeyPoint> keypoints, Mat ORBdescriptors);
 };
 
 class KeyFrameDatabase
@@ -39,7 +44,9 @@ public:
     ~KeyFrameDatabase() = default;
 
     void addKeyFrame( const Mat& DNNFeature, int frameID, int submapID);
-
+    
+    void addKeyFrame( const Mat& DNNFeature, int frameID, int submapID, std::vector<KeyPoint>& keypoints, const Mat& ORBFeatures);
+    
     Ptr<KeyFrame> getKeyFrameByID(int keyFrameID);
 
     bool deleteKeyFrameByID(int keyFrameID);
@@ -50,11 +57,9 @@ public:
 
     void reset();
 
-    void shrinkDB();
-
     int getLastKeyFrameID();
 
-    std::vector<int> getCandidateKF(const Mat& currentFeature, const double& similarityLow, double& bestSimilarity, int& bestId);
+    std::vector<int> getCandidateKF(const Mat& currentFeature, const int currentSubmapID, const double& similarityLow, double& bestSimilarity, int& bestId);
 
     double score(InputArray feature1, InputArray feature2);
     
@@ -62,11 +67,14 @@ public:
     void printDB();
 
 private:
+    void addKeyFrameT(const Mat& DNNFeature, int frameID, int submapID, std::vector<KeyPoint>& keypoints, const Mat& ORBFeatures);
+    
+    void shrinkDB();
+    
     // < keyFrameID, KeyFrame>
     std::map<int, Ptr<KeyFrame> > DataBase;
 
     int maxSizeDB;
-
     int lastKeyFrameID;
 
 
